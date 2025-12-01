@@ -20,7 +20,7 @@ func NewNand(name string, numInputs int) *Nand {
 		n.inputs[i] = newPin(fmt.Sprintf("in%d", i), n)
 	}
 	n.output = &outPin{
-		namedPin: *newPin("out0", n),
+		namedPin: *newPin("out", n),
 	}
 	return n
 }

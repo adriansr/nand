@@ -54,7 +54,7 @@ type loadFile struct {
 func Load(contents []byte) (*Project, error) {
 	var loaded loadFile
 	if err := yaml.Unmarshal(contents, &loaded); err != nil {
-		return &loadFile{}, err
+		return nil, err
 	}
 	proj, err := loaded.build()
 	if err != nil {
@@ -103,14 +103,87 @@ func (p *pinRef) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+func (p *pinRef) String() string {
+	return fmt.Sprintf("%s.%s", p[0], p[1])
+}
+
+type buildFn func(name string) types.Component
+
+type buildInternals struct {
+	known     map[string]buildFn
+	internals map[string]types.Component
+}
+
 func (lf *loadFile) build() (*Project, error) {
-	var proj Project
+	var (
+		proj  Project
+		build buildInternals
+	)
 	proj.Name = lf.Name
-	knownComponents := make(map[string]types.Component, len(lf.Components)+1)
+	build.known = make(map[string]buildFn, len(lf.Components)+1)
+	build.known["nand"] = func(name string) types.Component { return types.NewNand(name, 2) }
+
 	for _, component := range lf.Components {
-		if _, ok := knownComponents[component.Name]; ok {
+		if _, ok := build.known[component.Name]; ok {
 			return nil, fmt.Errorf("duplicate component name: %s", component.Name)
 		}
+		bf, err := component.build(&build)
+		if err != nil {
+			return nil, fmt.Errorf("loading component name: %s: %w", component.Name, err)
+		}
+		build.known[component.Name] = bf
 	}
+	return nil, nil
+}
 
+func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
+	build.internals = make(map[string]types.Component, len(lc.Internals))
+	for intName, intType := range lc.Internals {
+		if _, ok := build.internals[intName]; ok {
+			return nil, fmt.Errorf("duplicate internal name: %s", intName)
+		}
+		fn, ok := build.known[intType]
+		if !ok {
+			return nil, fmt.Errorf("unknown component type: %s in %s internals for %s", intType, intName, lc.Name)
+		}
+		build.internals[intName] = fn(intType)
+	}
+	for _, conn := range lc.Connections {
+		out, err := build.lookupOutput(conn.From)
+		if err != nil {
+			return nil, err
+		}
+		inp, err := build.lookupInput(conn.To)
+		if err != nil {
+			return nil, err
+		}
+		out.Connect(inp)
+	}
+	return nil, nil
+}
+
+func (bi *buildInternals) lookupInput(addr pinRef) (types.WritePin, error) {
+	cc, found := bi.internals[addr[0]]
+	if !found {
+		return nil, fmt.Errorf("pinref %s: internal %s not found", addr, addr[0])
+	}
+	for _, inp := range cc.Inputs() {
+		if inp.Name() == addr[1] {
+			return inp, nil
+		}
+	}
+	return nil, fmt.Errorf("pinref %s: input %s not found", addr, addr[1])
+}
+
+func (bi *buildInternals) lookupOutput(addr pinRef) (types.OutPin, error) {
+	cc, found := bi.internals[addr[0]]
+	if !found {
+		return nil, fmt.Errorf("pinref %s: internal %s not found", addr.String(), addr[0])
+	}
+	for _, inp := range cc.Outputs() {
+		if inp.Name() == addr[1] {
+			return inp, nil
+		}
+	}
+	return nil, fmt.Errorf("pinref %s: output %s not found", addr.String(), addr[1])
 }

@@ -22,7 +22,7 @@ type WritePin interface {
 type OutPin interface {
 	Pin
 
-	Connect(WritePin)
+	Connect(WritePin) // TODO: Detect and fail if already connected
 	Consumers() []WritePin
 	SetRaw(v BitVal)
 	IsSet() bool
