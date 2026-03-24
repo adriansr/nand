@@ -6,68 +6,113 @@ type Named interface {
 	Name() string
 }
 
-type Pin interface {
+/*type Pin interface {
 	Named
 
-	Value() BitVal
 	Ref() Component
-}
-
-type WritePin interface {
-	Pin
-
 	SetRaw(BitVal)
-}
-
-type OutPin interface {
-	Pin
-
-	Connect(WritePin) // TODO: Detect and fail if already connected
-	Consumers() []WritePin
-	SetRaw(v BitVal)
+	Value() BitVal
+	Connect(Pin) bool
+	Consumers() []Pin
 	IsSet() bool
-}
+}*/
 
 type Component interface {
 	Named
 
-	Inputs() []WritePin
-	Outputs() []OutPin
-	Update(Ctx)
+	Inputs() []*Pin
+	Outputs() []*Pin
+	Update(ctx *ChangeContext)
 }
 
-type Ctx interface {
-	SetOutput(pin OutPin, val BitVal)
-}
+//type Ctx interface {
+//	SetOutput(pin Pin, val BitVal)
+//}
 
 type Runtime interface {
 	Done() bool
 	Next() Component
 }
 
-type outPin struct {
-	namedPin
-	set     bool
-	targets []WritePin
+type named string
+
+func (n named) Name() string {
+	return string(n)
 }
 
-func (out *outPin) Connect(wp WritePin) {
-	for idx := range out.targets {
-		if out.targets[idx] == wp {
-			return
+func newNamed(name string) named {
+	return named(name)
+}
+
+type Pin struct {
+	named
+	ref     Component
+	source  *Pin
+	targets []*Pin
+	v       BitVal
+	set     bool
+}
+
+func NewPin(name string, ref Component) *Pin {
+	return &Pin{
+		named: newNamed(name),
+		ref:   ref,
+	}
+}
+
+func (p *Pin) Connect(target *Pin) bool {
+	for _, t := range p.targets {
+		if t == target {
+			return true
 		}
 	}
-	out.targets = append(out.targets, wp)
+
+	prev := target.source
+	target.source = p
+	if prev != nil {
+		return false
+	}
+
+	p.targets = append(p.targets, target)
+	return true
 }
 
-func (out *outPin) Consumers() []WritePin {
-	return out.targets
+func (p *Pin) Value() BitVal {
+	return p.v
 }
 
-func (out *outPin) IsSet() bool {
-	return out.set
+func (p *Pin) Ref() Component {
+	return p.ref
 }
-func (out *outPin) SetRaw(v BitVal) {
-	out.set = true
-	out.v = v
+
+func (p *Pin) Set(v BitVal) {
+	p.set = true
+	p.v = v
+}
+
+func (p *Pin) Consumers() []*Pin {
+	return p.targets
+}
+
+func (p *Pin) IsSet() bool {
+	return p.set
+}
+
+type WrappingComponent struct {
+	named
+
+	inputs  []Pin
+	outputs []Pin
+}
+
+func (wc *WrappingComponent) Inputs() []Pin {
+	return wc.inputs
+}
+
+func (wc *WrappingComponent) Outputs() []Pin {
+	return wc.outputs
+}
+
+func (wc *WrappingComponent) Update() {
+	panic("implement me")
 }

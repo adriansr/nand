@@ -4,19 +4,19 @@ type ChangeContext struct {
 	changed map[Component]struct{}
 }
 
-func (c *ChangeContext) SetInput(pin WritePin, val BitVal) {
-	pin.SetRaw(val)
+func (c *ChangeContext) SetInput(pin *Pin, val BitVal) {
+	pin.Set(val)
 	if c.changed == nil {
 		c.changed = make(map[Component]struct{})
 	}
 	c.changed[pin.Ref()] = struct{}{}
 }
 
-func (c *ChangeContext) SetOutput(pin OutPin, val BitVal) {
+func (c *ChangeContext) SetOutput(pin *Pin, val BitVal) {
 	if pin.IsSet() && pin.Value() == val {
 		return
 	}
-	pin.SetRaw(val)
+	pin.Set(val)
 	if c.changed == nil {
 		c.changed = make(map[Component]struct{})
 	}
@@ -25,7 +25,7 @@ func (c *ChangeContext) SetOutput(pin OutPin, val BitVal) {
 		if dest.Value() == val {
 			continue
 		}
-		dest.SetRaw(val)
+		dest.Set(val)
 		c.changed[dest.Ref()] = struct{}{}
 	}
 }

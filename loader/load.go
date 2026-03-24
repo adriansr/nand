@@ -13,6 +13,20 @@ import (
 var Sample string = `
 name: builtin-sample
 components:
+  - name: inv
+    internals:
+      inverter: nand
+    inputs:
+     - name: in
+       to:
+         - inverter.in0
+         - inverter.in1
+    outputs:
+    - name: out
+      from: inverter.out
+    test:
+    - [0, 1]
+    - [1, 1]
   - name: sr_latch
     internals:
       nand_left: nand
@@ -68,16 +82,18 @@ type loadedComponent struct {
 	Internals   map[string]string
 	Connections []loadedConnection
 	Inputs      []inputMapping
+	Outputs     []outputMapping
 	Test        [][]uint8
 }
 
 type loadedConnection struct {
-	From, To pinRef
+	From pinRef
+	To   MaybeList[pinRef]
 }
 
 type inputMapping struct {
 	Name string
-	To   pinRef
+	To   MaybeList[pinRef]
 }
 
 type outputMapping struct {
@@ -105,6 +121,25 @@ func (p *pinRef) UnmarshalYAML(node *yaml.Node) error {
 
 func (p *pinRef) String() string {
 	return fmt.Sprintf("%s.%s", p[0], p[1])
+}
+
+type MaybeList[T any] []T
+
+func (list *MaybeList[T]) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.SequenceNode {
+		var t T
+		if err := node.Decode(&t); err != nil {
+			return fmt.Errorf("decoding MaybeList as single item: %w", err)
+		}
+		*list = []T{t}
+		return nil
+	}
+	var tt []T
+	if err := node.Decode(&tt); err != nil {
+		return fmt.Errorf("decoding MaybeList as sequence: %w", err)
+	}
+	*list = tt
+	return nil
 }
 
 type buildFn func(name string) types.Component
@@ -153,13 +188,50 @@ func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
 		if err != nil {
 			return nil, err
 		}
-		inp, err := build.lookupInput(conn.To)
-		if err != nil {
-			return nil, err
+		for _, to := range conn.To {
+			inp, err := build.lookupInput(to)
+			if err != nil {
+				return nil, err
+			}
+			if !out.Connect(inp) {
+				return nil, fmt.Errorf("already connected: %s", to)
+			}
 		}
-		out.Connect(inp)
 	}
+	var inputs []types.WritePin = make([]types.WritePin, len(lc.Inputs))
+	for idx, inp := range lc.Inputs {
+		inputs[idx] = &inputPin{
+			name: inp.Name,
+		}
+		inputs[idx].RawConnectTo()
+	}
+	tests.Test()
 	return nil, nil
+}
+
+type inputPin struct {
+	name string
+	val  types.BitVal
+}
+
+func (ip *inputPin) Name() string {
+	return ip.name
+}
+
+func (ip *inputPin) Value() types.BitVal {
+	return ip.val
+}
+
+func (ip *inputPin) Ref() types.Component {
+	panic("inputPin.Ref() called")
+}
+
+func (ip *inputPin) RawConnectTo(pin types.OutPin) types.OutPin {
+	panic("inputPin.RawConnectTo() called")
+}
+
+func (ip *inputPin) SetRaw(val types.BitVal) {
+
 }
 
 func (bi *buildInternals) lookupInput(addr pinRef) (types.WritePin, error) {
