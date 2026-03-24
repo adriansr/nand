@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
+	"nand/tester"
 	"nand/types"
 
 	"gopkg.in/yaml.v3"
@@ -26,7 +26,7 @@ components:
       from: inverter.out
     test:
     - [0, 1]
-    - [1, 1]
+    - [1, 0]
   - name: sr_latch
     internals:
       nand_left: nand
@@ -44,8 +44,6 @@ components:
     outputs:
       - name: out
         from: nand_left.out
-      - name: nout
-        from: nand_right.out
     test:
       - [0, 1, 1]
       - [1, 1, 1]
@@ -168,15 +166,67 @@ func (lf *loadFile) build() (*Project, error) {
 		}
 		build.known[component.Name] = bf
 	}
-	return nil, nil
+	proj.Components = make([]types.Component, 0, len(lf.Components))
+	for _, component := range lf.Components {
+		proj.Components = append(proj.Components, build.known[component.Name](component.Name))
+	}
+	return &proj, nil
+}
+
+type testRunner struct {
+	name    string
+	inputs  []*types.Pin
+	outputs []*types.Pin
+	// We keep references to the internal components so they stay alive or just for structure.
+	internals map[string]types.Component
+}
+
+func (tr *testRunner) Name() string {
+	return tr.name
+}
+
+func (tr *testRunner) Inputs() []*types.Pin {
+	return tr.inputs
+}
+
+func (tr *testRunner) Outputs() []*types.Pin {
+	return tr.outputs
+}
+
+func (tr *testRunner) Update(ctx *types.ChangeContext) {
+	for _, in := range tr.inputs {
+		if in.IsSet() {
+			val := in.Value()
+			for _, dest := range in.Consumers() {
+				ctx.SetInput(dest, val)
+			}
+		}
+	}
 }
 
 func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
-	build.internals = make(map[string]types.Component, len(lc.Internals))
+	// 1. Run the test with a throwaway instance
+	tr, err := lc.instantiate("test_runner", build.known)
+	if err != nil {
+		return nil, err
+	}
+	if len(lc.Test) > 0 {
+		tester.Test(tr.Inputs(), tr.Outputs(), lc.Test)
+	}
+
+	// 2. Return the build function that produces new instances
+	return func(name string) types.Component {
+		comp, _ := lc.instantiate(name, build.known)
+		return comp
+	}, nil
+}
+
+func (lc *loadedComponent) instantiate(name string, known map[string]buildFn) (*testRunner, error) {
+	build := &buildInternals{
+		known:     known,
+		internals: make(map[string]types.Component, len(lc.Internals)),
+	}
 	for intName, intType := range lc.Internals {
-		if _, ok := build.internals[intName]; ok {
-			return nil, fmt.Errorf("duplicate internal name: %s", intName)
-		}
 		fn, ok := build.known[intType]
 		if !ok {
 			return nil, fmt.Errorf("unknown component type: %s in %s internals for %s", intType, intName, lc.Name)
@@ -198,43 +248,37 @@ func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
 			}
 		}
 	}
-	var inputs []types.WritePin = make([]types.WritePin, len(lc.Inputs))
+	tr := &testRunner{name: name, internals: build.internals}
+	var inputs []*types.Pin = make([]*types.Pin, len(lc.Inputs))
 	for idx, inp := range lc.Inputs {
-		inputs[idx] = &inputPin{
-			name: inp.Name,
+		inputs[idx] = types.NewPin(inp.Name, tr)
+		for _, to := range inp.To {
+			target, err := build.lookupInput(to)
+			if err != nil {
+				return nil, err
+			}
+			if !inputs[idx].Connect(target) {
+				return nil, fmt.Errorf("already connected: %s", to)
+			}
 		}
-		inputs[idx].RawConnectTo()
 	}
-	tests.Test()
-	return nil, nil
+	tr.inputs = inputs
+	var outputs []*types.Pin = make([]*types.Pin, len(lc.Outputs))
+	for idx, outp := range lc.Outputs {
+		outputs[idx] = types.NewPin(outp.Name, tr)
+		source, err := build.lookupOutput(outp.From)
+		if err != nil {
+			return nil, err
+		}
+		if !source.Connect(outputs[idx]) {
+			return nil, fmt.Errorf("already connected: %s", outp.From)
+		}
+	}
+	tr.outputs = outputs
+	return tr, nil
 }
 
-type inputPin struct {
-	name string
-	val  types.BitVal
-}
-
-func (ip *inputPin) Name() string {
-	return ip.name
-}
-
-func (ip *inputPin) Value() types.BitVal {
-	return ip.val
-}
-
-func (ip *inputPin) Ref() types.Component {
-	panic("inputPin.Ref() called")
-}
-
-func (ip *inputPin) RawConnectTo(pin types.OutPin) types.OutPin {
-	panic("inputPin.RawConnectTo() called")
-}
-
-func (ip *inputPin) SetRaw(val types.BitVal) {
-
-}
-
-func (bi *buildInternals) lookupInput(addr pinRef) (types.WritePin, error) {
+func (bi *buildInternals) lookupInput(addr pinRef) (*types.Pin, error) {
 	cc, found := bi.internals[addr[0]]
 	if !found {
 		return nil, fmt.Errorf("pinref %s: internal %s not found", addr, addr[0])
@@ -247,7 +291,7 @@ func (bi *buildInternals) lookupInput(addr pinRef) (types.WritePin, error) {
 	return nil, fmt.Errorf("pinref %s: input %s not found", addr, addr[1])
 }
 
-func (bi *buildInternals) lookupOutput(addr pinRef) (types.OutPin, error) {
+func (bi *buildInternals) lookupOutput(addr pinRef) (*types.Pin, error) {
 	cc, found := bi.internals[addr[0]]
 	if !found {
 		return nil, fmt.Errorf("pinref %s: internal %s not found", addr.String(), addr[0])

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+
+	"nand/loader"
 	"nand/tester"
 	"nand/types"
 )
@@ -31,4 +34,10 @@ func main() {
 			{0, 1, 1},
 			{1, 1, 1},
 		})
+	proj, err := loader.Load([]byte(loader.Sample))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Printf("Loaded project: %v\n", proj)
 }
