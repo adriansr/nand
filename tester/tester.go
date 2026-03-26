@@ -6,7 +6,8 @@ import (
 	"nand/types"
 )
 
-func Test[T comparable](inp []*types.Pin, outp []*types.Pin, tt [][]T) {
+func Test[T comparable](c types.BaseComponent, tt [][]T) {
+	inp, outp := c.Inputs(), c.Outputs()
 	for tcIdx, tc := range tt {
 		var ctx types.ChangeContext
 		if len(tc) != len(inp)+len(outp) {
@@ -21,9 +22,9 @@ func Test[T comparable](inp []*types.Pin, outp []*types.Pin, tt [][]T) {
 		}
 
 		if !eq(outp[0].Value(), tc[len(tc)-1]) {
-			panic(fmt.Sprintf("outputs must have expected value at [%d]: %v", tcIdx, tc))
+			panic(fmt.Sprintf("🔴 outputs must have expected value at %s[%d]: %v", c.Name(), tcIdx, tc))
 		}
-		fmt.Printf(":green: [%d]: %v\n", tcIdx, tc)
+		fmt.Printf("🟢 %s[%d]: %v\n", c.Name(), tcIdx, tc)
 	}
 }
 

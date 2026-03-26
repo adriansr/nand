@@ -6,22 +6,28 @@ type Named interface {
 	Name() string
 }
 
-/*type Pin interface {
-	Named
+/*
+	type Pin interface {
+		Named
 
-	Ref() Component
-	SetRaw(BitVal)
-	Value() BitVal
-	Connect(Pin) bool
-	Consumers() []Pin
-	IsSet() bool
-}*/
-
-type Component interface {
+		Ref() Component
+		SetRaw(BitVal)
+		Value() BitVal
+		Connect(Pin) bool
+		Consumers() []Pin
+		IsSet() bool
+	}
+*/
+type BaseComponent interface {
 	Named
 
 	Inputs() []*Pin
 	Outputs() []*Pin
+}
+
+type Component interface {
+	BaseComponent
+
 	Update(ctx *ChangeContext)
 }
 

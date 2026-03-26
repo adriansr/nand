@@ -3,9 +3,9 @@ package loader
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"nand/tester"
 	"nand/types"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +27,38 @@ components:
     test:
     - [0, 1]
     - [1, 0]
+  - name: xor
+    internals:
+      nand_1: nand
+      nand_2: nand
+      nand_3: nand
+      nand_4: nand
+    connections:
+      - from: nand_2.out
+        to: nand_1.in1
+      - from: nand_2.out
+        to: nand_3.in0
+      - from: nand_1.out
+        to: nand_4.in0
+      - from: nand_3.out
+        to: nand_4.in1
+    inputs:
+      - name: a
+        to:
+        - nand_1.in0
+        - nand_2.in0
+      - name: b
+        to:
+        - nand_2.in1
+        - nand_3.in1
+    outputs:
+      - name: out
+        from: nand_4.out
+    test:
+      - [0, 0, 0]
+      - [0, 1, 1]
+      - [1, 0, 1]
+      - [1, 1, 0]
   - name: sr_latch
     internals:
       nand_left: nand
@@ -206,12 +238,12 @@ func (tr *testRunner) Update(ctx *types.ChangeContext) {
 
 func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
 	// 1. Run the test with a throwaway instance
-	tr, err := lc.instantiate("test_runner", build.known)
+	tr, err := lc.instantiate(lc.Name, build.known)
 	if err != nil {
 		return nil, err
 	}
 	if len(lc.Test) > 0 {
-		tester.Test(tr.Inputs(), tr.Outputs(), lc.Test)
+		tester.Test(tr, lc.Test)
 	}
 
 	// 2. Return the build function that produces new instances
