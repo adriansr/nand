@@ -243,6 +243,14 @@ func (tr *testRunner) Update(ctx *types.ChangeContext) {
 			}
 		}
 	}
+	for _, out := range tr.outputs {
+		if out.IsSet() {
+			val := out.Value()
+			for _, dest := range out.Consumers() {
+				ctx.SetInput(dest, val)
+			}
+		}
+	}
 }
 
 func (lc *loadedComponent) build(build *buildInternals) (buildFn, error) {
