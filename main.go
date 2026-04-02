@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"nand/loader"
 	"nand/tester"
@@ -59,10 +60,13 @@ func main() {
 			{0, 1, 1},
 			{1, 1, 1},
 		})
-	proj, err := loader.Load([]byte(loader.Sample))
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	for _, path := range os.Args[1:] {
+		fmt.Println("Loading project from:", path)
+		proj, err := loader.LoadFile(path)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		fmt.Printf("Loaded project: %v\n", proj)
 	}
-	fmt.Printf("Loaded project: %v\n", proj)
 }

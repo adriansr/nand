@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"nand/tester"
 	"nand/types"
+	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -93,6 +94,14 @@ type Project struct {
 type loadFile struct {
 	Name       string
 	Components []loadedComponent
+}
+
+func LoadFile(filename string) (*Project, error) {
+	contents, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return Load(contents)
 }
 
 func Load(contents []byte) (*Project, error) {
