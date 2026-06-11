@@ -38,6 +38,7 @@ type Component interface {
 type Runtime interface {
 	Done() bool
 	Next() Component
+	Pending() int
 }
 
 type named string

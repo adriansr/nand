@@ -4,7 +4,14 @@ type ChangeContext struct {
 	changed map[Component]struct{}
 }
 
+func (c *ChangeContext) Pending() int {
+	return len(c.changed)
+}
+
 func (c *ChangeContext) SetInput(pin *Pin, val BitVal) {
+	if pin.IsSet() && pin.Value() == val {
+		return
+	}
 	pin.Set(val)
 	if c.changed == nil {
 		c.changed = make(map[Component]struct{})

@@ -3,10 +3,11 @@ package loader
 import (
 	"errors"
 	"fmt"
-	"nand/tester"
-	"nand/types"
 	"os"
 	"strings"
+
+	"nand/tester"
+	"nand/types"
 
 	"gopkg.in/yaml.v3"
 )

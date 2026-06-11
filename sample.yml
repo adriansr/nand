@@ -58,9 +58,9 @@ components:
       - from: nand_right.out
         to: nand_left.in1
     inputs:
-      - name: s
+      - name: ns
         to: nand_left.in0
-      - name: c
+      - name: nc
         to: nand_right.in1
     outputs:
       - name: out
@@ -93,3 +93,38 @@ components:
       - [0, 1, 0]
       - [1, 0, 0]
       - [1, 1, 1]
+  - name: bit
+    internals:
+      sr: sr_latch
+      set_nand: nand
+      rst_nand: nand
+      inv: inv
+    inputs:
+      - name: set
+        to:
+          - set_nand.in0
+          - rst_nand.in0
+      - name: data
+        to:
+          - set_nand.in1
+          - inv.in
+    connections:
+      - from: inv.out
+        to: rst_nand.in1
+      - from: rst_nand.out
+        to: sr.nc
+      - from: set_nand.out
+        to: sr.ns
+    outputs:
+      - name: out
+        from: sr.out
+    test:
+      - [0, 0, 0]
+      - [1, 0, 0]
+      - [0, 1, 0]
+      - [1, 1, 1]
+      - [0, 0, 1]
+      - [0, 1, 1]
+      - [1, 0, 0]
+      - [0, 1, 0]
+      - [0, 0, 0]

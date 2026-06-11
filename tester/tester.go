@@ -6,7 +6,22 @@ import (
 	"nand/types"
 )
 
-func Test[T comparable](c types.BaseComponent, tt [][]T) {
+type testOptions struct {
+	debug bool
+}
+
+type TestOpt func(*testOptions)
+
+func WithDebug(ops *testOptions) {
+	ops.debug = true
+}
+
+func Test[T comparable](c types.BaseComponent, tt [][]T, opts ...TestOpt) {
+	var options testOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	inp, outp := c.Inputs(), c.Outputs()
 	for tcIdx, tc := range tt {
 		var ctx types.ChangeContext
@@ -17,7 +32,15 @@ func Test[T comparable](c types.BaseComponent, tt [][]T) {
 			ctx.SetInput(inp[idx], toVal(tc[idx]))
 		}
 
+		iters := 0
+		if options.debug {
+			fmt.Printf("\n")
+		}
 		for !ctx.Done() {
+			if options.debug {
+				iters++
+				fmt.Printf("-- debug: iters=%d len=%d\r", iters, ctx.Pending())
+			}
 			ctx.Next().Update(&ctx)
 		}
 
